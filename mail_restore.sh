@@ -25,6 +25,8 @@
 
 #GERAIS
 BACKUP_NAME=$(echo $1 | sed s/.tar.gz//)
+DOMINIO_INPUT=$2
+ARQUIVO_INPUT=$1
 
 #CORES
 VERMELHO="\033[31;1m"
@@ -38,6 +40,7 @@ GREEN_SINAL="[$VERDE ! $COLOR_OFF]"
 EMAIL_CHAVE=0
 DOMINIO_CHAVE=0
 COMPLETO_CHAVE=0
+LOOP_KEY=0
 # ------------------------------------------------------------------------ # 
 
 # ------------------------------- FUNÇÕES ----------------------------------------- #
@@ -213,9 +216,10 @@ then
     exit 1
 fi
     
-#LISTA OS EMAILS DO DOMÍNIO ESCOLHIDO E SOLICITA QUE UM DELES SEJA SELECIONADO PARA RESTAURAÇÃO:
+#CRIA FUNÇÃO PARA LISTAR OS EMAILS DO DOMÍNIO ESCOLHIDO E SOLICITA QUE UM DELES SEJA SELECIONADO PARA RESTAURAÇÃO:
+restore(){
 for LINE in $EMAIL_USERS;
-    do echo -e $AMARELO"E-mail localizado: $VERDE $LINE@$2 $COLOR_OFF";
+    do echo -e $AMARELO"E-mail localizado: $VERDE $LINE@$DOMINIO_INPUT $COLOR_OFF";
 done;
 
 echo -e "$GREEN_SINAL - Selecione um dos e-mails listados para prosseguir com a restauração da conta"
@@ -224,30 +228,41 @@ read -p "Insira o nome do arquivo: " EMAIL_INPUT
 #VERIFICA SE O INPUT É UM DOS EMAILS LISTADOS E ATIVE UM SWITCH PARA PERMITIR O PROSSEGUIMENTO:
 for LINE in $EMAIL_USERS
 do
-    if [ "$EMAIL_INPUT" = "$LINE@$2" ]
+    if [ "$EMAIL_INPUT" = "$LINE@$DOMINIO_INPUT" ]
     then
         EMAIL_CHAVE=1 
     fi
 done
 
-#INICIA O PROCESSO DE RESTAURAÇÃO DO BANCO DE DADOS SELECIONADO: <EM CONSTRUÇÃO>
-
+#INICIA O PROCESSO DE RESTAURAÇÃO DO EMAIL
 if [ $EMAIL_CHAVE -eq 1 ]
 then
-    echo "O backup de $EMAIL_INPUT pode ser restaurado"
+    echo -e "$GREEN_SINAL - O backup de $VERDE$EMAIL_INPUT$COLOR_OFF será restaurado!"
     EMAIL_DIR=$(echo $EMAIL_INPUT | awk -F"@" {'print$1'})
     echo -e "$GREEN_SINAL - Extraindo conteúdo do e-mail $EMAIL_INPUT..."
-    tar -xf $1 $BACKUP_NAME/homedir/mail/$2/$EMAIL_DIR --warning=no-timestamp
+    tar -xf $ARQUIVO_INPUT $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR --warning=no-timestamp
     echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
-    if [ ! -d $HOME_USUARIO/mail/$2/$EMAIL_DIR ]
+    if [ ! -d $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR ]
     then
-        mkdir -p $HOME_USUARIO/mail/$2/$EMAIL_DIR/
+        mkdir -p $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR/
     fi
-    rsync -qzarhP $BACKUP_NAME/homedir/mail/$2/$EMAIL_DIR/* $HOME_USUARIO/mail/$2/$EMAIL_DIR
-    echo -e "$GREEN_SINAL - E-mails restaurados com sucesso."
+    rsync -qzarhP $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR/* $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR
+    echo -e "$GREEN_SINAL -$VERDE E-mails restaurados com sucesso.$COLOR_OFF"
     rm -rf $PWD/$BACKUP_NAME
+    exit 0
 else
     echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
-    
 fi
+}
+
+#REALIZA A RESTAURAÇÃO ATRAVÉS DA FUNÇÃO
+restore
+
+#ENQUANTO O IPUNT FOR INVÁLIDO, SOLICITA QUE ENTRE COM UM VALOR VÁLIDO.
+while [ $EMAIL_CHAVE -ne 1 ]
+do
+    clear
+    echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
+    restore
+done
 # ------------------------------------------------------------------------ #
