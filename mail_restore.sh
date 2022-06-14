@@ -65,7 +65,6 @@ $VERDE [EXEMPLO]: $COLOR_OFF ./restore-mail.sh $AMARELO backup-6.7.2022_17-02-55
 --help -> EXIBE AJUDA
 $VERDE [EXEMPLO]: $COLOR_OFF ./restore-mail.sh $AMARELO --help $COLOR_OFF
 "
-
 exit
 }
 
@@ -94,7 +93,7 @@ if [ $# -ne 2 ];
 fi
 
 
-#VERIFICAR NOME DO USUÁRIO DE CPANEL ATRAVÉS DO ARQUIVO DE BACKUP
+#VERIFICAR NOME DO USUÁRIO DE CPANEL ATRAVÉS DO ARQUIVO DE BACKUP E VALIDAR QUE O ARQUIVO DE BACKUP EXISTE NESTE DIRETÓRIO
 if [ -f $PWD/$1 ];
     then    
         case $1 in
@@ -113,34 +112,58 @@ if [ -f $PWD/$1 ];
             *)
                 echo "Arquivo inválido"
                 exit 1
-                ;;
-
-            
+                ;;  
         esac
+
+        #VERIFICAR SE O USUÁRIO É VÁLIDO (EVITAR QUE O USUÁRIO SEJA O ROOT) (EVITAR CONFLITO COM ARQUIVOS DE MESMO NOME)
+        if [ -f $PWD/$BACKUP_NAME ]
+        then
+            echo -e "$RED_SINAL -$AMARELO Já existe um arquivo chamado $BACKUP_NAME neste diretório. Não é possível realizar a extração! Remova ou renomeie o arquivo existe!  $COLOR_OFF"
+            exit 1
+        fi
+        if [ $USUARIO = "root" ]
+        then
+            echo -e "$RED_SINAL -$AMARELO Não é possível restaurar um backup do usuário $VERMELHO$USUARIO$AMARELO! $COLOR_OFF"
+            exit 1
+        fi
     else
     echo -e "$RED_SINAL - $AMARELO O arquivo $VERMELHO$1$AMARELO não foi localizado neste diretório! $COLOR_OFF";
     exit 1;
 fi;
 
+#VERIFICAR SE O USUÁRIO EXISTE NO SERVIDOR ONDE O BACKUP ESTÁ SENDO RESTAURADO
 HOME_USUARIO=$(grep $USUARIO /etc/passwd|cut -f6 -d":")
-
-if [ -z $HOME_USUARIO ]
-then
-    echo -e "$RED_SINAL -$AMARELO O usuário $USUARIO não foi encontrado neste servidor! $COLOR_OFF"
-    exit 1   
+id -u "$USUARIO" >/dev/null 2>&1
+if [ $? -eq 0 ]; then
+    if [ ! -d "$HOME_USUARIO" ]
+    then
+        echo -e "$RED_SINAL -$AMARELO O usuário $VERMELHO$USUARIO$AMARELO não foi encontrado neste servidor! $COLOR_OFF"
+        exit 1
+    fi
+else
+    echo -e "$RED_SINAL -$AMARELO O usuário $VERMELHO$USUARIO$AMARELO não foi encontrado neste servidor! $COLOR_OFF"
+    exit 1
 fi
+
+
 # ------------------------------------------------------------------------ # 
 
 # ------------------------------- EXECUÇÃO - RESTAURAÇÃO COMPLETA (flag -a) ----------------------------------------- #
 
 #REALIZA A RESTAURAÇÂO DE TODA A PASTA /MAIL CASO A OPÇÃO -a SEJA UTILIZADA E FINALIZA O SCRIPT
 if [ $COMPLETO_CHAVE -eq 1 ]; then
-    echo "O backup de todos os e-mails será restaurado"
+
+    echo -e "$GREEN_SINAL - O Usuário $VERDE$USUARIO$COLOR_OFF existe neste servidor!"
+    echo -e "$GREEN_SINAL - O backup de todos os e-mails será restaurado:"
     echo -e "$GREEN_SINAL - Extraindo conteúdo dos e-mails..."
-    tar -xf $1 $BACKUP_NAME/homedir/mail --warning=no-timestamp
+    tar -xf $1 $BACKUP_NAME/homedir/mail --warning=no-timestamp 2>/dev/null
     if [ $? -eq 0 ]
     then
         echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
+        if [ ! -d $HOME_USUARIO/mail ]
+        then
+            mkdir -p $HOME_USUARIO/mail/
+        fi
         rsync -qzarhP $BACKUP_NAME/homedir/mail/* $HOME_USUARIO/mail/
         echo -e "$GREEN_SINAL - E-mails restaurados com sucesso."
         rm -rf $PWD/$BACKUP_NAME
@@ -183,11 +206,11 @@ fi
 
 #VERIFICA SE O ARQUIVO É INTEGRO E ESTÁ NO FORMATO DE BACKUP DE CPANEL:
 EMAIL_USERS=$(echo "$(tar --ignore-command-error -tvf $1 $BACKUP_NAME/homedir/mail/$2)" | awk -F" " {'print $6'} | awk -F"/" {'print $5'} | uniq)
-if [ ! $? -eq 0 ]
+if [ $? -ne 0 ]
 then 
     echo -e "$RED_SINAL -$VERMELHO O Backup está corrompido. $COLOR_OFF 
     A pasta $AMARELO $BACKUP_NAME/homedir/mail $COLOR_OFF não foi localizada neste backup";
-exit 1
+    exit 1
 fi
     
 #LISTA OS EMAILS DO DOMÍNIO ESCOLHIDO E SOLICITA QUE UM DELES SEJA SELECIONADO PARA RESTAURAÇÃO:
@@ -216,10 +239,15 @@ then
     echo -e "$GREEN_SINAL - Extraindo conteúdo do e-mail $EMAIL_INPUT..."
     tar -xf $1 $BACKUP_NAME/homedir/mail/$2/$EMAIL_DIR --warning=no-timestamp
     echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
+    if [ ! -d $HOME_USUARIO/mail/$2/$EMAIL_DIR ]
+    then
+        mkdir -p $HOME_USUARIO/mail/$2/$EMAIL_DIR/
+    fi
     rsync -qzarhP $BACKUP_NAME/homedir/mail/$2/$EMAIL_DIR/* $HOME_USUARIO/mail/$2/$EMAIL_DIR
     echo -e "$GREEN_SINAL - E-mails restaurados com sucesso."
     rm -rf $PWD/$BACKUP_NAME
 else
-    echo "O backup de $EMAIL_INPUT NÃO pode ser restaurado"
+    echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
+    
 fi
 # ------------------------------------------------------------------------ #
