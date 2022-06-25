@@ -27,6 +27,8 @@
 BACKUP_NAME=$(echo $1 | sed s/.tar.gz//)
 DOMINIO_INPUT=$2
 ARQUIVO_INPUT=$1
+DATA_BACKUP=$(date +'%d-%m-%Y')
+HORA_BACKUP=$(date +'%H-%M-%S')
 
 #CORES
 VERMELHO="\033[31;1m"
@@ -160,6 +162,7 @@ if [ $COMPLETO_CHAVE -eq 1 ]; then
     echo -e "$GREEN_SINAL - O backup de todos os e-mails será restaurado:"
     echo -e "$GREEN_SINAL - Extraindo conteúdo dos e-mails..."
     tar -xf $1 $BACKUP_NAME/homedir/mail --warning=no-timestamp 2>/dev/null
+    tar -xf $1 $BACKUP_NAME/homedir/etc --warning=no-timestamp 2>/dev/null
     if [ $? -eq 0 ]
     then
         echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
@@ -167,6 +170,7 @@ if [ $COMPLETO_CHAVE -eq 1 ]; then
         then
             mkdir -p $HOME_USUARIO/mail/
         fi
+        rsync -qzarhP $BACKUP_NAME/homedir/etc/* $HOME_USUARIO/etc/
         rsync -qzarhP $BACKUP_NAME/homedir/mail/* $HOME_USUARIO/mail/
         echo -e "$GREEN_SINAL - E-mails restaurados com sucesso."
         rm -rf $PWD/$BACKUP_NAME
@@ -241,11 +245,50 @@ then
     EMAIL_DIR=$(echo $EMAIL_INPUT | awk -F"@" {'print$1'})
     echo -e "$GREEN_SINAL - Extraindo conteúdo do e-mail $EMAIL_INPUT..."
     tar -xf $ARQUIVO_INPUT $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR --warning=no-timestamp
+    tar -xf $ARQUIVO_INPUT $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT --warning=no-timestamp
     echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
     if [ ! -d $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR ]
     then
         mkdir -p $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR/
     fi
+    if [ ! -d $HOME_USUARIO/etc/$DOMINIO_INPUT ]
+    then
+        mkdir -p $HOME_USUARIO/etc/$DOMINIO_INPUT/
+    fi
+    
+    #RESTAURANDO ARQUIVO /ETC/DOMINIO/SHADOW
+    if [ -f $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow ]
+    then
+        cp $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow.backup.$DATA_BACKUP
+    else
+        touch $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow
+        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/shadow | grep -w $EMAIL_DIR)
+        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow
+    fi
+    
+    if [ -z $(grep -w "$EMAIL_DIR:" $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow) ]
+    then
+        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/shadow | grep -w $EMAIL_DIR)
+        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow
+    fi
+
+    #RESTAURANDO ARQUIVO /ETC/DOMINIO/PASSWD
+    if [ -f $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd ]
+    then
+        cp $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd-backup-$DATA_BACKUP-$HORA_BACKUP
+    else
+        touch $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd
+        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/passwd | grep -w $EMAIL_DIR)
+        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd
+    fi
+    
+    if [ -z $(grep -w "$EMAIL_DIR:" $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd) ]
+    then
+        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/passwd | grep -w $EMAIL_DIR)
+        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd
+    fi
+
+    #RESTAURANDO ARQUIVOS DA PASTA /MAIL
     rsync -qzarhP $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR/* $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR
     echo -e "$GREEN_SINAL -$VERDE E-mails restaurados com sucesso.$COLOR_OFF"
     rm -rf $PWD/$BACKUP_NAME
