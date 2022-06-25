@@ -76,13 +76,13 @@ exit
 # ------------------------------- TESTES ----------------------------------------- # 
 
 #VERIFICAR SE A AJUDA FOI CHAMADA (--help)
-if [ $1 = "--help" ] || [ $2 = "--help" ]; 
+if [ "$1" = "--help" ] || [ "$2" = "--help" ]; 
     then
         ajuda
 fi
 
 #VERIFICAR SE A RESTAURAÇÃO DO BACKUP É COMPLETA
-if [ $2 = "-a" ]; 
+if [ "$2" = "-a" ]; 
     then
         COMPLETO_CHAVE=1
 fi
