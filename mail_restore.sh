@@ -1,7 +1,6 @@
 #!/usr/bin/env bash 
 #
 # restore-mail.sh - Realiza restauração de e-mails em arquivo de backup de cpanel.
-# 
 # Autor:      Eduardo C. Souza 
 # Manutenção: Eduardo C. Souza 
 # 
