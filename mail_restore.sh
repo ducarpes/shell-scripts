@@ -205,7 +205,7 @@ if [ $COMPLETO_CHAVE -eq 1 ]; then
             rm -rf $PWD/$BACKUP_NAME
             echo -e "$GREEN_SINAL - Executando perms para correção depermissões..."
             cd $HOME_USUARIO
-            perms
+            perms 1>/dev/null
             echo -e "$GREEN_SINAL - Operação concluída com sucesso"
             exit 0
         else
@@ -332,7 +332,7 @@ then
     rm -rf $PWD/$BACKUP_NAME
     echo -e "$GREEN_SINAL - Executando perms para correção depermissões..."
     cd $HOME_USUARIO
-    perms
+    perms 1>/dev/null
     echo -e "$GREEN_SINAL - Operação concluída com sucesso"
     exit 0
 else
