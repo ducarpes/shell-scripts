@@ -203,6 +203,10 @@ if [ $COMPLETO_CHAVE -eq 1 ]; then
 
             echo -e "$GREEN_SINAL - Todos os E-mails disponíveis neste backup foram restaurados com sucesso."
             rm -rf $PWD/$BACKUP_NAME
+            echo -e "$GREEN_SINAL - Executando perms para correção depermissões..."
+            cd $HOME_USUARIO
+            perms
+            echo -e "$GREEN_SINAL - Operação concluída com sucesso"
             exit 0
         else
             echo -e "$RED_SINAL -$AMARELO Arquivo de Backup selecionado pode estar corrompido ou possui formato inválido para esta restauração.$COLOR_OFF"
@@ -326,6 +330,10 @@ then
     rsync -qzarhP $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR/* $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR
     echo -e "$GREEN_SINAL -$VERDE E-mails restaurados com sucesso.$COLOR_OFF"
     rm -rf $PWD/$BACKUP_NAME
+    echo -e "$GREEN_SINAL - Executando perms para correção depermissões..."
+    cd $HOME_USUARIO
+    perms
+    echo -e "$GREEN_SINAL - Operação concluída com sucesso"
     exit 0
 else
     echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
