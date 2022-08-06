@@ -1,6 +1,7 @@
 #!/usr/bin/env bash 
 #
 # restore-mail.sh - Realiza restauração de e-mails em arquivo de backup de cpanel.
+# 
 # Autor:      Eduardo C. Souza 
 # Manutenção: Eduardo C. Souza 
 # 
@@ -200,12 +201,12 @@ if [ $COMPLETO_CHAVE -eq 1 ]; then
             for diretorio in $(ls -l $HOME_USUARIO/etc/ | grep '^d' | awk -F" " {'print$9'}); do cat $HOME_USUARIO/etc/$diretorio/shadow $HOME_USUARIO/etc/$diretorio/shadow.bkp | sort -u -o $HOME_USUARIO/etc/$diretorio/shadow; done 2>/dev/null
             for diretorio in $(ls -l $HOME_USUARIO/etc/ | grep '^d' | awk -F" " {'print$9'}); do cat $HOME_USUARIO/etc/$diretorio/passwd $HOME_USUARIO/etc/$diretorio/passwd.bkp | sort -u -o $HOME_USUARIO/etc/$diretorio/passwd; done 2>/dev/null
 
-            echo -e "$GREEN_SINAL - Todos os E-mails disponíveis neste backup foram restaurados com sucesso."
+            echo -e "$GREEN_SINAL -$VERDE Todos os E-mails disponíveis neste backup foram restaurados com sucesso.$COLOR_OFF"
             rm -rf $PWD/$BACKUP_NAME
-            echo -e "$GREEN_SINAL - Executando perms para correção depermissões..."
+            echo -e "$GREEN_SINAL - Executando perms para correção de permissões..."
             cd $HOME_USUARIO
             perms >/dev/null 2>&1
-            echo -e "$GREEN_SINAL - Operação concluída com sucesso"
+            echo -e "$GREEN_SINAL - $VERDE Restauração concluída com sucesso.$COLOR_OFF"
             exit 0
         else
             echo -e "$RED_SINAL -$AMARELO Arquivo de Backup selecionado pode estar corrompido ou possui formato inválido para esta restauração.$COLOR_OFF"
@@ -329,10 +330,10 @@ then
     rsync -qzarhP $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR/* $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR
     echo -e "$GREEN_SINAL -$VERDE E-mails restaurados com sucesso.$COLOR_OFF"
     rm -rf $PWD/$BACKUP_NAME
-    echo -e "$GREEN_SINAL - Executando perms para correção depermissões..."
+    echo -e "$GREEN_SINAL - Executando perms para correção de permissões..."
     cd $HOME_USUARIO
     perms >/dev/null 2>&1
-    echo -e "$GREEN_SINAL - Operação concluída com sucesso"
+    echo -e "$GREEN_SINAL -$VERDE Restauração concluída com sucesso.$COLOR_OFF"
     exit 0
 else
     echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
