@@ -552,8 +552,6 @@ echo "$MAIN_LOG"
 log-null
 }
 # ------------------------------- EXECUÇÃO ----------------------------------------- #
-if [[ $(hostname) =~ .*hostgator* ]] || [[ $(hostname) =~ .*prodns*  ]] && [[ -e /opt/hgctrl/.zengator ]] 
-then
     case $FLAG in  
         "add-mail")
             add-mail
@@ -667,4 +665,3 @@ then
             exit 1
             ;;  
     esac
-fi
