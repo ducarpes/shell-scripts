@@ -552,117 +552,119 @@ echo "$MAIN_LOG"
 log-null
 }
 # ------------------------------- EXECUÇÃO ----------------------------------------- #
+if [[ $(hostname) =~ .*hostgator* ]] || [[ $(hostname) =~ .*prodns*  ]] && [[ -e /opt/hgctrl/.zengator ]] 
+then
+    case $FLAG in  
+        "add-mail")
+            add-mail
+            ;;
 
-case $FLAG in  
-    "add-mail")
-        add-mail
-        ;;
-
-    "del-mail")
-        del-mail
-        ;;
-    
-    "add-sql")
-        add-sql
-        ;;
-
-    "del-sql")
-        del-sql
-        ;;
-
-    "cpanel-login")
-        cpanel-login
-        ;;
-
-    "cpanel-session")
-        cpanel-session
-        ;;    
-
-    "cpanel-fail")
-        cpanel-fail
-        ;;
-    
-    "whm-login")
-        whm-login
-        ;;
-
-    "whm-session")
-        whm-session
-        ;; 
-
-    "whm-fail")
-        whm-fail
-        ;;
-
-    "add-domain")
-        add-domain
-        ;;
+        "del-mail")
+            del-mail
+            ;;
         
-    "del-domain")
-        del-domain
-        ;;  
+        "add-sql")
+            add-sql
+            ;;
 
-    "add-subdomain")
-        add-subdomain
-        ;;  
+        "del-sql")
+            del-sql
+            ;;
 
-    "del-subdomain")
-        del-subdomain
-        ;;  
+        "cpanel-login")
+            cpanel-login
+            ;;
 
-    "add-ftp")
-        add-ftp
-        ;;  
+        "cpanel-session")
+            cpanel-session
+            ;;    
 
-    "del-ftp")
-        del-ftp
-        ;;  
+        "cpanel-fail")
+            cpanel-fail
+            ;;
+        
+        "whm-login")
+            whm-login
+            ;;
 
-    "dns-zone")
-        dns-zone
-        ;;
+        "whm-session")
+            whm-session
+            ;; 
 
-    "mail-mainlog")
-        mail-mainlog
-        ;;
+        "whm-fail")
+            whm-fail
+            ;;
 
-    "mail-pop3")
-        mail-pop3
-        ;;  
+        "add-domain")
+            add-domain
+            ;;
+            
+        "del-domain")
+            del-domain
+            ;;  
 
-    "mail-imap")
-        mail-imap
-        ;;
-    "mail-deleted")
-        mail-deleted
-        ;;
+        "add-subdomain")
+            add-subdomain
+            ;;  
 
-    "acct-log")
-        acct-log
-        ;;            
+        "del-subdomain")
+            del-subdomain
+            ;;  
 
-    "ftp-login")
-        ftp-login
-        ;;
+        "add-ftp")
+            add-ftp
+            ;;  
 
-    "ssh-login")
-        ssh-login
-        ;;     
-    "sftp-login")
-        sftp-login
-        ;;
+        "del-ftp")
+            del-ftp
+            ;;  
 
-    "cm-dropped")
-        cm-dropped
-        ;;
-    
-    "passwd-mail") 
-        passwd-mail
-        ;;
+        "dns-zone")
+            dns-zone
+            ;;
 
-    *)
-        echo -e "$RED_SINAL -$AMARELO A opção selecionada é inválida$COLOR_OFF!"
-        echo -e "$YELLOW_SINAL - Certifique-se de utilizar uma opção válida!"
-        exit 1
-        ;;  
-esac
+        "mail-mainlog")
+            mail-mainlog
+            ;;
+
+        "mail-pop3")
+            mail-pop3
+            ;;  
+
+        "mail-imap")
+            mail-imap
+            ;;
+        "mail-deleted")
+            mail-deleted
+            ;;
+
+        "acct-log")
+            acct-log
+            ;;            
+
+        "ftp-login")
+            ftp-login
+            ;;
+
+        "ssh-login")
+            ssh-login
+            ;;     
+        "sftp-login")
+            sftp-login
+            ;;
+
+        "cm-dropped")
+            cm-dropped
+            ;;
+        
+        "passwd-mail") 
+            passwd-mail
+            ;;
+
+        *)
+            echo -e "$RED_SINAL -$AMARELO A opção selecionada é inválida$COLOR_OFF!"
+            echo -e "$YELLOW_SINAL - Certifique-se de utilizar uma opção válida!"
+            exit 1
+            ;;  
+    esac
+fi
