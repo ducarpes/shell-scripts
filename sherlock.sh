@@ -439,7 +439,7 @@ log-null
 mail-pop3(){
 mail-select2
 echo -e "$GREEN_SINAL -$VERDE Verificando logs de conexões POP3 realizadas na conta $EMAIL! Aguarde... $COLOR_OFF"
-MAIN_LOG=$(zgrep -i "$EMAIL" /var/log/maillog* | grep -v -i "Aborted" | grep -i "pop3-login" | awk -F " " {'print "DATA: " $1 "-" $2 " - HORA: " $3 " - " $6 " - " $8 " - " $10'} | tr -d "/<>," | sed 's/varlog.*maillog://' | sed 's/rip=/IP: /' | sed 's/user=/EMAIL: /' | sed 's/varlogmaillog-//' | sed 's/202[0-9].*[0-9][0-9][0-9][0-9]://' | sort -k2M)
+MAIN_LOG=$(zgrep -i "$EMAIL" /var/log/maillog* | grep -v -i "Aborted" | grep -i "pop3-login" | grep -v "Disconnected:" | awk -F " " {'print "DATA: " $1 "-" $2 " - HORA: " $3 " - " $6 " - " $8 " - " $10'} | tr -d "/<>," | sed 's/varlog.*maillog://' | sed 's/rip=/IP: /' | sed 's/user=/EMAIL: /' | sed 's/varlogmaillog-//' | sed 's/202[0-9].*[0-9][0-9][0-9][0-9]://' | sort -k2M)
 echo "$MAIN_LOG"
 log-null
 }
@@ -448,7 +448,7 @@ log-null
 mail-imap(){
 mail-select2
 echo -e "$GREEN_SINAL -$VERDE Verificando logs de conexões IMAP realizadas na conta $EMAIL! Aguarde... $COLOR_OFF"
-MAIN_LOG=$(zgrep -i "$EMAIL" /var/log/maillog* | grep -v -i "Aborted" | grep -i "imap-login" | tr -d "/<>," | awk -F " " {'print "DATA: " $1 "/" $2 " - HORA: " $3 " - " $6 " - " $8 " - " $10'} | sed 's/varlog.*maillog://' | sed 's/rip=/IP: /' | sed 's/user=/EMAIL: /' | sed 's/varlogmaillog-//' | sed 's/202[0-9].*[0-9][0-9][0-9][0-9]://' | sort -k2M)
+MAIN_LOG=$(zgrep -i "$EMAIL" /var/log/maillog* | grep -v -i "Aborted" | grep -i "imap-login" | grep -v "Disconnected:" | tr -d "/<>," | awk -F " " {'print "DATA: " $1 "/" $2 " - HORA: " $3 " - " $6 " - " $8 " - " $10'} | sed 's/varlog.*maillog://' | sed 's/rip=/IP: /' | sed 's/user=/EMAIL: /' | sed 's/varlogmaillog-//' | sed 's/202[0-9].*[0-9][0-9][0-9][0-9]://' | sort -k2M)
 echo "$MAIN_LOG"
 log-null
 }
@@ -552,6 +552,8 @@ echo "$MAIN_LOG"
 log-null
 }
 # ------------------------------- EXECUÇÃO ----------------------------------------- #
+#if [[ $(hostname) =~ .*hostgator* ]] || [[ $(hostname) =~ .*prodns*  ]] && [[ -e /opt/hgctrl/.zengator ]] 
+#then
     case $FLAG in  
         "add-mail")
             add-mail
@@ -665,3 +667,4 @@ log-null
             exit 1
             ;;  
     esac
+#fi
