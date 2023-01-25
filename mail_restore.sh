@@ -1,36 +1,28 @@
 #!/usr/bin/env bash 
 #
-# restore-mail.sh - Realiza restauração de e-mails em arquivo de backup de cpanel.
+# sherlock.sh - Realiza a busca por resultado de diversos tipos de LOGS do servidor.
 # 
 # Autor:      Eduardo C. Souza 
 # Manutenção: Eduardo C. Souza 
 # 
 # ------------------------------------------------------------------------ # 
-#  Este Script verifica quais Emails estão disponíveis no arquivo de backup especificado e permite escolher um banco para realizar 
-#  a restauração ou realizar a restauração de todos os e-mails
-# 
-#  Exemplos: 
-#      $ ./restore-mail.sh backup-5.13.2022_17-17-36_simulado.tar.gz -a
-#      Neste exemplo o Script vai restaurar todos os e-mails existentes no arquivo de backup
-#      
-#      $ ./restore-mail.sh backup-5.13.2022_17-17-36_simulado.tar.gz domínio.com.br
-#      Neste exemplo o Script vai exibir os e-mails do domínio inserido e solicitar para escolher apenas 1 para ser restaurado
-#
+#   Este script utiliza os logs maillog, access_log, exim_mainlog e outros para localizar registros conforme necessidade.
 # ------------------------------------------------------------------------ # 
 # Histórico: 
 # 
-#   v1.0 11/06/2022, Eduardo: 
+#   v1.0 30/12/2022, Eduardo: 
+#
+#   v1.1 25/01/2023, Eduardo: 
+#   - Corrigido opções de acesso ao Help (--help, -h, help e "nenhum argumento" agora abrem a função help)
+#   - Adicionado validação do usuário hgtransfer junto ao usuário root
+#   - Adicionada validação do usuário selecionado. Para verificar se existe no servidor.
+#   - Alterada a posição das aspas nos comandos "AWK" para fora das chaves. Ex '{print}'
+#
 # ------------------------------------------------------------------------ # 
+
 # ------------------------------- VARIÁVEIS ----------------------------------------- #
 
-#GERAIS
-BACKUP_NAME=$(echo $1 | sed s/.tar.gz//)
-DOMINIO_INPUT=$2
-ARQUIVO_INPUT=$1
-DATA_BACKUP=$(date +'%d-%m-%Y')
-HORA_BACKUP=$(date +'%H-%M-%S')
-
-#CORES
+#CORES:
 VERMELHO="\033[31;1m"
 VERDE="\033[32;1m"
 AMARELO="\033[33;1m"
@@ -39,116 +31,78 @@ RED_SINAL="[$VERMELHO ! $COLOR_OFF]"
 GREEN_SINAL="[$VERDE ! $COLOR_OFF]"
 YELLOW_SINAL="[$AMARELO ! $COLOR_OFF]"
 
-#CONTADORES E CHAVES
-EMAIL_CHAVE=0
-DOMINIO_CHAVE=0
-COMPLETO_CHAVE=0
-LOOP_KEY=0
-# ------------------------------------------------------------------------ # 
+#VARIÁVEIS DE ENTRADA:
+FLAG=$1
+USUARIO=$2
+ARCHIVE=$3
 
-# ------------------------------- FUNÇÕES ----------------------------------------- #
+#CHAVES:
+HELP_KEY=0
+ZIP_KEY=0
 
-#--help
-ajuda(){
-
-echo -e "
-$VERMELHO[AJUDA]$COLOR_OFF
- 
-1 - Não utilize o caminho absoluto para designar o arquivo de backup;
-2 - Execute o comando detro do mesmo diretório que arquivo que deseja restaurar;
-3 - O usuário do backup deverá ser o mesmo usuário do Cpanel.
-
-$VERMELHO[SINTAXE]$COLOR_OFF
-
-./restore-mail.sh $AMARELO <ARQUIVO_DE_BACKUP> <DOMÍNIO | -a> $COLOR_OFF
-
-$VERDE [EXEMPLO]: $COLOR_OFF ./restore-mail.sh $AMARELO backup-6.7.2022_17-02-55_exemplo.tar.gz exemplo.com.br $COLOR_OFF
-
-$VERMELHO[OPÇÔES]$COLOR_OFF
-
--a -> REALIZA RESTAURAÇÃO DE TODOS OS E-MAILS
-$VERDE [EXEMPLO]: $COLOR_OFF ./restore-mail.sh $AMARELO backup-6.7.2022_17-02-55_exemplo.tar.gz -a $COLOR_OFF
-
---help -> EXIBE AJUDA
-$VERDE [EXEMPLO]: $COLOR_OFF ./restore-mail.sh $AMARELO --help $COLOR_OFF
-"
-exit
+# ------------------------------- FUNÇÕES GERAIS ----------------------------------------- #
+#SOLICITA A ENTRADA DE UMA CONTA DE E-MAIL E DE UM TERMO PARA PESQUISA NOS LOGS (ASSUNTO, DESTINATÁRIO, REMETENTE)
+mail-select1(){
+EMAIL=""
+EMAIL_GREP=""
+while [ "$EMAIL" == "" ]
+do 
+    read -p "$(echo -e "$GREEN_SINAL - Insira o endereço de e-mail de origem: ")" EMAIL
+done
+while [ "$EMAIL_GREP" == "" ]
+do
+    read -p "$(echo -e "$GREEN_SINAL - Insira uma termo chave para pesquisa: ")" EMAIL_GREP
+done
 }
 
-# ------------------------------------------------------------------------ # 
+#SOLICITA A ENTRADA DE UMA CONTA DE E-MAIL PARA PESQUISA NOS LOGS
+mail-select2(){
+EMAIL=""
+while [ "$EMAIL" == "" ]
+do
+    read -p "$(echo -e "$GREEN_SINAL - Insira o endereço de e-mail de origem: ")" EMAIL
+done
+}
 
-# ------------------------------- TESTES ----------------------------------------- # 
+#FUNÇÃO QUE SOLICITA A ENTRADA DE UM DOMÍNIO PARA PESQUISA NOS LOGS
+domain-select(){
+DOMINIO=""
+while [ "$DOMINIO" == "" ]
+do 
+    read -p "$(echo -e "$GREEN_SINAL - Insira o domínio principal da conta que deseja pesquisar: ")" DOMINIO
+done
+}
 
-if [ "$PWD" = "/" ]
-    then 
-        echo -e "$RED_SINAL -$AMARELO Não é possível executar este script diretamente dentro do diretório raiz (/).$COLOR_OFF"
-        echo -e "$YELLOW_SINAL - Execute o Script em outro diretório."
-        exit 1
-fi
+#FUNÇÃO QUE INFORMA CASO NENHUM LOG SEJA ENCONTRADO NA PESQUISA:
+log-null(){
 
-#VERIFICAR SE A AJUDA FOI CHAMADA (--help)
-if [ "$1" = "--help" ] || [ "$2" = "--help" ]; 
+if [ "$ZIP_KEY" -eq 1 ]
+then
+    if [ "$MAIN_LOG_ZIP" = "" ]
     then
-        ajuda
+    echo -e "$RED_SINAL -$AMARELO Nenhum registro foi encontrado para esta pesquisa nos logs arquivados! $COLOR_OFF"
+    exit 0
+    fi
 fi
 
-#VERIFICAR SE A RESTAURAÇÃO DO BACKUP É COMPLETA
-if [ "$2" = "-a" ]; 
-    then
-        COMPLETO_CHAVE=1
+if [ "$MAIN_LOG" = "" ]
+then
+        echo -e "$RED_SINAL -$AMARELO Nenhum registro foi encontrado para esta pesquisa nos logs recentes! $COLOR_OFF"
+        exit 0  
 fi
+}
 
-#VERIFICAR QUANTIDADE DE ARGUMENTOS/OPÇÕES DECLARADAS
-if [ $# -ne 2 ]; 
-    then
-        echo -e "$RED_SINAL -$AMARELO Argumentos inválidos! Digite o nome do arquivo de backup do Cpanel e o domínio que deseja verificar! $COLOR_OFF"
-        ajuda
-        exit 1
+#FUNÇÃO PARA VERIFICAR SE O USUÁRIO SELECIONADO É ROOT OU HGTRANSFER:
+check-root(){
+if [ "$USUARIO" == "root" ] || [ "$USUARIO" == "hgtransfer" ];
+then
+    echo -e "$RED_SINAL -$VERDE O usuário escolhido não é autorizado. Pesquise um usuário de Cpanel! $COLOR_OFF"
+    exit 0
 fi
+}
 
-
-#VERIFICAR NOME DO USUÁRIO DE CPANEL ATRAVÉS DO ARQUIVO DE BACKUP E VALIDAR QUE O ARQUIVO DE BACKUP EXISTE NESTE DIRETÓRIO
-if [ -f $PWD/$1 ];
-    then    
-        case $1 in
-            *"backup"*)
-                USUARIO=$( echo $BACKUP_NAME | sed 's/backup.*_//' )
-                ;;
-
-            *"cpmove"*)
-                USUARIO=$( echo $BACKUP_NAME | awk -F"." {'print$1'} | sed s/cpmove-// )
-                ;;
-            
-            *".tar.gz"*)
-                USUARIO=$( echo $BACKUP_NAME | awk -F"." {'print$1'} )
-                ;;
-            
-            *)
-                echo -e "$RED_SINAL -$AMARELO O Arquivo $VERMELHO$1$AMARELO é inválido$COLOR_OFF!"
-                echo -e "$YELLOW_SINAL - Certifique-se de utilizar um backup completo de Cpanel válido!"
-                exit 1
-                ;;  
-        esac
-
-        #VERIFICAR SE O USUÁRIO É VÁLIDO (EVITAR QUE O USUÁRIO SEJA O ROOT) (EVITAR CONFLITO COM ARQUIVOS DE MESMO NOME)
-        if [ -f $PWD/$BACKUP_NAME ]
-        then
-            echo -e "$RED_SINAL -$AMARELO Já existe um diretório chamado $VERMELHO$BACKUP_NAME$AMARELO dentro deste diretório atual. Não é possível realizar a extração!$COLOR_OFF"
-            echo -e "$YELLOW_SINAL - Se possível Remova ou renomeie o diretório existente ou mova o backup para outro diretório!"
-            #Atualização para o futuro: implementar utilização de um diretório temporário para extração dos arquivos
-            exit 1
-        fi
-        if [ $USUARIO = "root" ]
-        then
-            echo -e "$RED_SINAL -$AMARELO Não é possível restaurar um backup do usuário $VERMELHO$USUARIO$AMARELO! $COLOR_OFF"
-            exit 1
-        fi
-    else
-    echo -e "$RED_SINAL - $AMARELO O arquivo $VERMELHO$1$AMARELO não foi localizado neste diretório! $COLOR_OFF";
-    exit 1;
-fi;
-
-#VERIFICAR SE O USUÁRIO EXISTE NO SERVIDOR ONDE O BACKUP ESTÁ SENDO RESTAURADO
+#FUNÇÃO PARA VERIFICAR SE O USUÁRIO SELECIONADO EXISTE NO SERVIDOR:
+check-user(){
 HOME_USUARIO=$(grep $USUARIO /etc/passwd|cut -f6 -d":")
 id -u "$USUARIO" >/dev/null 2>&1
 if [ $? -eq 0 ]; then
@@ -163,191 +117,601 @@ else
     echo -e "$YELLOW_SINAL - Certifique-se que o usuário $VERMELHO$USUARIO$COLOR_OFF possui uma conta de CPANEL no servidor $VERMELHO$HOSTNAME$COLOR_OFF"
     exit 1
 fi
-
-
-# ------------------------------------------------------------------------ # 
-
-# ------------------------------- EXECUÇÃO - RESTAURAÇÃO COMPLETA (flag -a) ----------------------------------------- #
-
-#REALIZA A RESTAURAÇÂO DE TODA A PASTA /MAIL CASO A OPÇÃO -a SEJA UTILIZADA E FINALIZA O SCRIPT
-if [ $COMPLETO_CHAVE -eq 1 ]; then
-    read -p "$(echo -e "$YELLOW_SINAL Este procedimento realiza a restauração de backup completo de e-mails. Deseja prosseguir? (s/n):")" RESTORE_ALL_INPUT
-    if [ "$RESTORE_ALL_INPUT" = "s" ]; then
-        echo -e "$GREEN_SINAL - O Usuário $VERDE$USUARIO$COLOR_OFF existe neste servidor!"
-        echo -e "$GREEN_SINAL - O backup de todos os e-mails será restaurado:"
-        echo -e "$GREEN_SINAL - Extraindo conteúdo dos e-mails..."
-        tar -xf $1 $BACKUP_NAME/homedir/mail --warning=no-timestamp 2>/dev/null
-        tar -xf $1 $BACKUP_NAME/homedir/etc --warning=no-timestamp 2>/dev/null
-        if [ $? -eq 0 ]
-        then
-            echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
-            if [ ! -d $HOME_USUARIO/mail ]
-            then
-                mkdir -p $HOME_USUARIO/mail/
-                
-            fi
-            if [ ! -d $HOME_USUARIO/etc ]
-            then 
-                mkdir -p $HOME_USUARIO/etc/
-            fi
-
-            #BACKUP /ETC
-            for diretorio in $(ls -l $HOME_USUARIO/etc/ | grep '^d' | awk -F" " {'print$9'}); do cp $HOME_USUARIO/etc/$diretorio/shadow $HOME_USUARIO/etc/$diretorio/shadow.bkp; done;
-            for diretorio in $(ls -l $HOME_USUARIO/etc/ | grep '^d' | awk -F" " {'print$9'}); do cp $HOME_USUARIO/etc/$diretorio/passwd $HOME_USUARIO/etc/$diretorio/passwd.bkp; done;
-            tar -czf $HOME_USUARIO/etc/etc-bkp.$DATA_BACKUP.$HORA_BACKUP.tar.gz $HOME_USUARIO/etc/ -P --warning=no-timestamp 2>/dev/null
-            #RESTORE
-            rsync -qzarhP $BACKUP_NAME/homedir/etc/* $HOME_USUARIO/etc/
-            rsync -qzarhP $BACKUP_NAME/homedir/mail/* $HOME_USUARIO/mail/
-            for diretorio in $(ls -l $HOME_USUARIO/etc/ | grep '^d' | awk -F" " {'print$9'}); do cat $HOME_USUARIO/etc/$diretorio/shadow $HOME_USUARIO/etc/$diretorio/shadow.bkp | sort -u -o $HOME_USUARIO/etc/$diretorio/shadow; done 2>/dev/null
-            for diretorio in $(ls -l $HOME_USUARIO/etc/ | grep '^d' | awk -F" " {'print$9'}); do cat $HOME_USUARIO/etc/$diretorio/passwd $HOME_USUARIO/etc/$diretorio/passwd.bkp | sort -u -o $HOME_USUARIO/etc/$diretorio/passwd; done 2>/dev/null
-
-            echo -e "$GREEN_SINAL -$VERDE Todos os E-mails disponíveis neste backup foram restaurados com sucesso.$COLOR_OFF"
-            rm -rf $PWD/$BACKUP_NAME
-            echo -e "$GREEN_SINAL - Executando perms para correção de permissões..."
-            cd $HOME_USUARIO
-            perms >/dev/null 2>&1
-            echo -e "$GREEN_SINAL - $VERDE Restauração concluída com sucesso.$COLOR_OFF"
-            exit 0
-        else
-            echo -e "$RED_SINAL -$AMARELO Arquivo de Backup selecionado pode estar corrompido ou possui formato inválido para esta restauração.$COLOR_OFF"
-            exit 1
-        fi
-    else
-        echo -e "$GREEN_SINAL - A restauração completa não será executada"
-        exit 1
-    fi
-fi
-# ------------------------------------------------------------------------ # 
-
-# ------------------------------- EXECUÇÃO - RESTAURAÇÃO INDIVUDUAL DE CONTA DE E-MAIL ----------------------------------------- # 
-
-#VERIFICAR SE O DOMÍNIO ESCOLHIDO PARA O ARGUMENTO $2 EXISTE NO ARQUIVO DE BACKUP:
-tar -xf $1 $BACKUP_NAME/cp/$USUARIO --warning=no-timestamp --ignore-command-error;
-if [ $? -ne 0 ]
-then
-    echo -e "$RED_SINAL -$AMARELO Arquivo de Backup selecionado pode estar corrompido ou possui formato inválido para esta restauração.$COLOR_OFF"
-    exit 1
-else
-    if [ -d $BACKUP_NAME/cp/ ];
-    then
-        DOMINIOS=$(cat $BACKUP_NAME/cp/$USUARIO | grep "DNS" | sed 's/backup.*=//' | grep -v "backup" | sed 's/DNS.*=//');
-        rm -rf $PWD/$BACKUP_NAME;
-    fi
-fi
-for DOMINIO in $DOMINIOS
-do
-    if [ "$2" = "$DOMINIO" ]
-        then
-            DOMINIO_CHAVE=1 
-    fi
-done
-
-if [ $DOMINIO_CHAVE -ne 1 ]
-then
-    echo -e "$RED_SINAL -$AMARELO O domínio $VERMELHO$2$AMARELO não existe neste backup ou não é um formato de domínio válido!$COLOR_OFF"
-    exit 1
-fi
-
-#VERIFICA SE O ARQUIVO É INTEGRO E ESTÁ NO FORMATO DE BACKUP DE CPANEL:
-EMAIL_USERS=$(echo "$(tar --ignore-command-error -tvf $1 $BACKUP_NAME/homedir/mail/$2)" | awk -F" " {'print $6'} | awk -F"/" {'print $5'} | uniq)
-if [ $? -ne 0 ]
-then 
-    echo -e "$RED_SINAL -$VERMELHO O Backup está corrompido. $COLOR_OFF 
-    A pasta $AMARELO $BACKUP_NAME/homedir/mail $COLOR_OFF não foi localizada neste backup";
-    exit 1
-fi
-    
-#CRIA FUNÇÃO PARA LISTAR OS EMAILS DO DOMÍNIO ESCOLHIDO E SOLICITA QUE UM DELES SEJA SELECIONADO PARA RESTAURAÇÃO:
-restore(){
-echo -e "$GREEN_SINAL - Os seguintes E-mails foram localizados e estão disponíveis para restauração:"    
-for LINE in $EMAIL_USERS;
-    do echo -e $AMARELO"E-mail localizado: $VERDE $LINE@$DOMINIO_INPUT $COLOR_OFF";
-done;
-
-echo -e "$GREEN_SINAL - Selecione um dos E-mails listados para prosseguir com a restauração da conta."
-read -p "Insira o E-mail que deseja restaurar: " EMAIL_INPUT
-
-#VERIFICA SE O INPUT É UM DOS EMAILS LISTADOS E ATIVE UM SWITCH PARA PERMITIR O PROSSEGUIMENTO:
-for LINE in $EMAIL_USERS
-do
-    if [ "$EMAIL_INPUT" = "$LINE@$DOMINIO_INPUT" ]
-    then
-        EMAIL_CHAVE=1 
-    fi
-done
-
-#INICIA O PROCESSO DE RESTAURAÇÃO DO EMAIL
-if [ $EMAIL_CHAVE -eq 1 ]
-then
-    echo -e "$GREEN_SINAL - O backup de $VERDE$EMAIL_INPUT$COLOR_OFF será restaurado!"
-    EMAIL_DIR=$(echo $EMAIL_INPUT | awk -F"@" {'print$1'})
-    echo -e "$GREEN_SINAL - Extraindo conteúdo do e-mail $EMAIL_INPUT..."
-    tar -xf $ARQUIVO_INPUT $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR --warning=no-timestamp
-    tar -xf $ARQUIVO_INPUT $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT --warning=no-timestamp
-    echo -e "$GREEN_SINAL - Restaurando e-mails com Rsync..."
-    if [ ! -d $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR ]
-    then
-        mkdir -p $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR/
-    fi
-    if [ ! -d $HOME_USUARIO/etc/$DOMINIO_INPUT ]
-    then
-        mkdir -p $HOME_USUARIO/etc/$DOMINIO_INPUT/
-    fi
-    
-    #RESTAURANDO ARQUIVO /ETC/DOMINIO/SHADOW
-    if [ -f $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow ]
-    then
-        cp $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow.backup.$DATA_BACKUP
-    else
-        touch $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow
-        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/shadow | grep -w $EMAIL_DIR)
-        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow
-    fi
-    
-    if [ -z $(grep -w "$EMAIL_DIR:" $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow) ]
-    then
-        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/shadow | grep -w $EMAIL_DIR)
-        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/shadow
-    fi
-
-    #RESTAURANDO ARQUIVO /ETC/DOMINIO/PASSWD
-    if [ -f $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd ]
-    then
-        cp $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd-backup-$DATA_BACKUP-$HORA_BACKUP
-    else
-        touch $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd
-        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/passwd | grep -w $EMAIL_DIR)
-        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd
-    fi
-    
-    if [ -z $(grep -w "$EMAIL_DIR:" $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd) ]
-    then
-        SHADOW_LINE=$(cat $BACKUP_NAME/homedir/etc/$DOMINIO_INPUT/passwd | grep -w $EMAIL_DIR)
-        echo "$SHADOW_LINE" >> $HOME_USUARIO/etc/$DOMINIO_INPUT/passwd
-    fi
-
-    #RESTAURANDO ARQUIVOS DA PASTA /MAIL
-    rsync -qzarhP $BACKUP_NAME/homedir/mail/$DOMINIO_INPUT/$EMAIL_DIR/* $HOME_USUARIO/mail/$DOMINIO_INPUT/$EMAIL_DIR
-    echo -e "$GREEN_SINAL -$VERDE E-mails restaurados com sucesso.$COLOR_OFF"
-    rm -rf $PWD/$BACKUP_NAME
-    echo -e "$GREEN_SINAL - Executando perms para correção de permissões..."
-    cd $HOME_USUARIO
-    perms >/dev/null 2>&1
-    echo -e "$GREEN_SINAL -$VERDE Restauração concluída com sucesso.$COLOR_OFF"
-    exit 0
-else
-    echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
-fi
 }
 
-#REALIZA A RESTAURAÇÃO ATRAVÉS DA FUNÇÃO
-restore
+check-hg(){
+if [[  $(hostname) =~ .*hostgator* ]] || [[  $(hostname) =~ .*prodns*  ]] && [[  -e /opt/hgctrl/.zengator ]] 
+then
+    echo -e "$YELLOW_SINAL - Não é possível executar este script no servidor: $HOSTNAME"
+    exit 1
+fi
+}
+# ------------------------------- FUNÇÃO HELP ----------------------------------------- #
 
-#ENQUANTO O IPUNT FOR INVÁLIDO, SOLICITA QUE ENTRE COM UM VALOR VÁLIDO.
-while [ $EMAIL_CHAVE -ne 1 ]
-do
-    clear
-    echo -e "$RED_SINAL -$AMARELO Não é possível restaurar o e-mail solicitado $VERMELHO($EMAIL_INPUT)$AMARELO. Escolha um email listado anteriormente! $COLOR_OFF"
-    restore
-done
-# ------------------------------------------------------------------------ #
+help(){
+echo -e "
+Bem vindo ao menu de ajuda da ferramenta de verificação de logs!
+
+"
+echo -e "SINTAXE:
+
+./sherlok.sh [LOG] [USUÁRIO] [-l | -a]
+
+-a -> Verificar logs arquivados.
+-l -> Verificar somente logs recentes.
+USUÁRIO: Usuário do CPANEL que será pesquisado.
+LOG -> Tipo de logo que deseja buscar.
+
+"
+echo -e "EXEMPLO:
+
+./sherlok.sh del-mail username -l
+
+"
+echo -e "OPÇÕES DISPONÍVEIS:
+-------------------------
+01 - add-mail        --> Verificar contas de e-mails adicionados no Cpanel;
+-------------------------
+02 - del-mail        --> Verificar contas de e-mails removidas do Cpanel;
+-------------------------
+03 - add-sql         --> Verificar bancos de dados adicionados no Cpanel;
+-------------------------
+04 - del-sql         --> Verificar bancos de dados removidos no Cpanel;
+-------------------------
+05 - cpanel_fail     --> Verificar tentativas de logins inválidos realizadas;
+-------------------------
+06 - cpanel_login    --> Verificar tentativas de logins realizados com sucesso;
+-------------------------
+07 - add-domain      --> Verificar domínios adicionados no cpanel;
+-------------------------
+08 - del-domain      --> Verificar domínios removidos do cpanel;
+-------------------------
+09 - add-subdomain   --> Verificar subdomínios adicionados no cpanel;
+-------------------------
+10 - del-subdomain   --> Verificar subdomínios removidos do cpanel;
+-------------------------
+11 - add-ftp         --> Verificar usuários de FTP adicionados ao Cpanel;
+-------------------------
+12 - del-ftp         --> Verificar usuários de FTP removidos do Cpanel;
+-------------------------
+13 - dns-zone        --> Verificar alterações realizadas na zona de DNS no CPANEL;
+-------------------------
+14 - mail-mainlog    --> Verificar Logs de envios e recebimentos de e-mails (exim_mainlog);
+-------------------------
+15 - mail-pop3       --> Verificar conexões POP3 realizadas por uma conta de e-mail (maillog);
+-------------------------
+16 - mail-imap       --> Verificar conexões IMAP realizadas por uma conta de e-mail (maillog);
+-------------------------
+17 - mail-deleted    --> Verificar exclusão de mensagens de contas de e-mail (maillog);
+-------------------------
+18 - acct-log        --> Verificar a criação e exclusão de contas de Cpanel no servidor (accounting.log);
+-------------------------
+19 - ftp-login       --> Verifica as conexões FTP realizadas no usuário selecionado;
+-------------------------
+20 - ssh-login       --> Verifica as conexões SSH realizadas no usuário selecionado;
+-------------------------
+21 - sftp-login      --> Verifica as conexões SFTP realizadas no usuário selecionado;
+-------------------------
+22 - passwd-mail     --> Verifica as alterações de senhas de e-mail realizadas
+-------------------------
+23 - cm-dropped      --> Verifica bloqueios de Cloudmark no histórico de logs 
+-------------------------
+24 - cpanel-session  --> Verifica logins realizados através de API (WHMLOGIN)
+-------------------------
+25 - whm-login       --> Verifica logins realizados no WHM
+-------------------------
+26 - whm-fail        --> Verifica logins inválidos realizados no WHM
+-------------------------
+27 - whm-session     --> Verifica logins ao WHM realizados através de API 
+-------------------------
+" 
+}
+
+# -------------------------------VALIDAÇÃO DE SERVIDORES DA MARCA----------------------------------------- # 
+
+check-hg
+
+# ------------------------------- CHAMADA DO HELP E VERIFICAÇÃO DE OPÇÕES DIGITADAS----------------------------------------- # 
+
+#HELP SERÁ CHAMADO CASO NÃO HAJA NENHUM ARGUMENTO DIIGTADO:
+if [ "$#" -eq 0 ]
+then
+    help | less
+fi  
+
+# SE O PRIMEIRO ARGUMENTO FOR --help, -h OU help SERÁ ATIVADA A KEY PARA HELP:
+if [ "$1" = "--help" ] || [ "$1" = "-h" ] || [ "$1" = "help" ]
+    then
+    HELP_KEY=1
+fi
+
+# SE A KEY DO HELP ESTIVER ATIVA, SERÁ CHAMADO O HELP, SE NÃO, VAI VERIFICAR SE POSSUI OS 3 ARGUMENTOS OBRIGATÓRIOS:
+if [ $HELP_KEY -eq 1 ]
+then
+    help | less
+    exit 0
+else
+    if [ $# -eq 3 ]; 
+    then
+        case $ARCHIVE in  
+            "-a")
+                ZIP_KEY=1
+                ;;
+            "-l")
+                ZIP_KEY=0
+                ;;
+            *)
+                echo -e "$RED_SINAL -$AMARELO Opções inválidas! Digite a opção para o tipo de log que deseja verificar e em seguida o nome do usuário desejado! $COLOR_OFF"
+                echo -e "$RED_SINAL -$AMARELO Acesse o --help para verificar a sintaxe adequada! $COLOR_OFF"
+                exit 1
+                ;;
+        esac
+    else
+        echo -e "$RED_SINAL -$AMARELO Opções inválidas! Digite a opção para o tipo de log que deseja verificar e em seguida o nome do usuário desejado! $COLOR_OFF"
+        echo -e "$RED_SINAL -$AMARELO Acesse o --help para verificar a sintaxe adequada! $COLOR_OFF"
+        exit 1
+    fi
+fi 
+
+# ------------------------------- FUNÇÕES ACCESS_LOG ----------------------------------------- #
+
+# CONTAS DE E-MAILS ADICIONADOS PELO CPANEL
+add-mail(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de contas de e-mails criadas na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual e-mail foi adicionado! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a "add_pop" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "add_pop" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")  
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+
+}
+
+# CONTAS DE E-MAILS REMOVIDAS PELO CPANEL
+del-mail(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de contas de e-mails excluídas na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual e-mail foi removido! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a "delete_pop" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "delete_pop" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# BANCOS DE DADOS ADICIONADOS PELO CPANEL
+add-sql(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de bancos de dados criados na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual banco de dados foi adicionado! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a "addb.html" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "addb.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# BANCOS DE DADOS REMOVIDOS PELO CPANEL
+del-sql(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de bancos de dados excluídos na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: A data deste log é 3 horas adiantada!"
+MAIN_LOG=$(grep -a "deldb.html?db=" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | grep -v "cPanel_magic_revision" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " BANCO DE DADOS: " $7}' | tr -d "[" | sed 's/\/cpsess.*=//')
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "deldb.html?db=" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | grep -v "cPanel_magic_revision" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " BANCO DE DADOS: " $7}' | tr -d "[" | sed 's/\/cpsess.*=//')
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# DOMÍNIOS ADICIONAIS ADICIONADOS PELO CPANEL
+add-domain(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de domínios adicionais adicionados na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual domínio foi adicionado! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a "addon/doadddomain.html" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "addon/doadddomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# DOMÍNIOS ADICIONAIS REMOVIDOS PELO CPANEL
+del-domain(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de domínios adicionais adicionados na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual domínio foi removido! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a "addon/dodeldomain.html" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "addon/dodeldomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# SUBDOMÍNIOS ADICIONADOS PELO CPANEL
+add-subdomain(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Subdomínios adicionados na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: A data deste log é 3 horas adiantada!"
+MAIN_LOG=$(grep -a "subdomain/doadddomain.html" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "subdomain/doadddomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# SUBDOMÍNIOS REMOVIDOS PELO CPANEL
+del-subdomain(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Subdomínios removidos na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: A data deste log é 3 horas adiantada!$COLOR_OFF"
+MAIN_LOG=$(grep -a "subdomain/dodeldomain.html" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "subdomain/dodeldomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# CONTAS DE FTP ADICIONADOS PELO CPANEL
+add-ftp(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de contas de FTP criadas na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: A data deste log é 3 horas adiantada$COLOR_OFF!"
+MAIN_LOG=$(grep -a "add_ftp?user" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/&domain=/@/' | sed 's/&pass.*$//')
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "add_ftp?user" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/&domain=/@/' | sed 's/&pass.*$//')
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# CONTAS DE FTP REMOVIDAS PELO CPANEL
+del-ftp(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de contas de FTP removidas na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: A data deste log é 3 horas adiantada!$COLOR_OFF"
+MAIN_LOG=$(grep -a "delete_ftp?user" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/%40/@/' | sed 's/&cache_fix=.*$//')
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "delete_ftp?user" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/%40/@/' | sed 's/&cache_fix=.*$//')
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# ZONA DE DNS MODIFICADA
+dns-zone(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de alterações realizadas na zona de DNS na conta do usuário $USUARIO! $COLOR_OFF"
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual domínio ou alteração especificamente foi realizada na zona de DNS! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a "/DNS/mass_edit_zone" /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep "/DNS/mass_edit_zone" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# ALTERAÇÕES DE SENHAS DE E-MAILS 
+passwd-mail(){ 
+echo -e "$GREEN_SINAL -$VERDE Verificando logs alterações de senhas de contas de e-mail do usuário $USUARIO! $COLOR_OFF" 
+echo -e "$GREEN_SINAL -$AMARELO ATENÇÃO: O Log não informa qual e-mail foi modificado! A data deste log é 3 horas adiantada! $COLOR_OFF"
+MAIN_LOG=$(grep -a 'passwd_pop' /usr/local/cpanel/logs/access_log | grep -w "$USUARIO" | grep -v "proxy" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG"
+#ZIPADO
+if [ $ZIP_KEY -eq 1 ];
+then
+echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+MAIN_LOG_ZIP=$(zgrep 'passwd_pop' /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | grep -v "proxy" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+fi
+#SE VAZIO:
+log-null
+}
+
+# ------------------------------- FUNÇÕES EXIM_MAINLOG ----------------------------------------- #
+
+# TRÁFEGO DE E-MAILS GERAL DE UMA CONTA DE E-MAIL
+mail-mainlog(){
+mail-select1
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de tráfego de e-mails da conta $EMAIL! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(exigrep "$EMAIL" /var/log/exim_mainlog* | exigrep "$EMAIL_GREP")
+echo "$MAIN_LOG"
+log-null
+}
+
+# VERIFICAR LOGS DE E-MAILS DROPADOS COMO SPAM - BLOQUEIO CLOUDMARK
+cm-dropped(){
+domain-select
+echo -e "$GREEN_SINAL -$VERDE Verificando por bloqueios de cloudmark para os e-mails do domínio: $DOMINIO! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(grep $DOMINIO /var/log/exim_mainlog | grep -i "dropped" | awk -F" " '{print"hamlookup " $3}' | uniq)
+echo "$MAIN_LOG"
+log-null
+}
+
+# ------------------------------- FUNÇÕES MAILLOG ----------------------------------------- #
+
+#PESQUISA CONEXÕES POP3 REALIZADAS
+mail-pop3(){
+mail-select2
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de conexões POP3 realizadas na conta $EMAIL! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(zgrep -i "$EMAIL" /var/log/maillog* | grep -v -i "Aborted" | grep -i "pop3-login" | grep -v "Disconnected:" | awk -F " " '{print "DATA: " $1 "-" $2 " - HORA: " $3 " - " $6 " - " $8 " - " $10}' | tr -d "/<>," | sed 's/varlog.*maillog://' | sed 's/rip=/IP: /' | sed 's/user=/EMAIL: /' | sed 's/varlogmaillog-//' | sed 's/202[0-9].*[0-9][0-9][0-9][0-9]://' | sort -k2M)
+echo "$MAIN_LOG"
+log-null
+}
+
+#PESQUISA CONEXÕES IMAP REALIZADAS
+mail-imap(){
+mail-select2
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de conexões IMAP realizadas na conta $EMAIL! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(zgrep -i "$EMAIL" /var/log/maillog* | grep -v -i "Aborted" | grep -i "imap-login" | grep -v "Disconnected:" | tr -d "/<>," | awk -F " " '{print "DATA: " $1 "/" $2 " - HORA: " $3 " - " $6 " - " $8 " - " $10}' | sed 's/varlog.*maillog://' | sed 's/rip=/IP: /' | sed 's/user=/EMAIL: /' | sed 's/varlogmaillog-//' | sed 's/202[0-9].*[0-9][0-9][0-9][0-9]://' | sort -k2M)
+echo "$MAIN_LOG"
+log-null
+}
+
+#PESQUISA POR MENSAGENS DE E-MAILS EXCLUÍDAS DE DETERMINADAS CONTAS.
+mail-deleted(){
+mail-select2
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de emails removidos da conta $EMAIL! Aguarde... $COLOR_OFF"
+POP3_LOG=$(grep "$EMAIL" /var/log/maillog | egrep -v 'del=0' | egrep -i 'del=' | grep "pop3" | awk -F " " {'print"\033[32;1m""POP3 - ""DATA: ""\033[0m" $1" "$2" "$3"\033[32;1m"" - APAGADOS: ""\033[0m"$12"\033[32;1m"" - EMAIL: ""\033[0m"$6'} | tr -d "," | sed 's/pop3.*(//' | sed 's/).*://' ) 
+IMAP_LOG=$(grep "$EMAIL" /var/log/maillog | egrep -v 'deleted=0|expunged=0|trashed=0' | egrep -i 'deleted=|expunged=|trashed=' | grep "imap" | sed 's/)<.*deleted//' | sed 's/=/ /' | sed 's/imap.*(//' | awk -F " " '{print"\033[32;1m""IMAP - ""DATA: ""\033[0m" $1" "$2" "$3"\033[32;1m"" - APAGADOS: ""\033[0m""deleted="$7" "$8" "$9"\033[32;1m"" - EMAIL: ""\033[0m"$6}')
+echo "$POP3_LOG"
+echo "$IMAP_LOG"  
+}
+
+# ------------------------------- FUNÇÕES ACCOUNTING.LOG ----------------------------------------- #
+
+#REALIZA A VERIFICAÇÃO DA CRIAÇÃO E EXCLUSÃO DE CONTAS DE CPANEL NO SERVIDOR.
+acct-log(){
+domain-select
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de contas criadas/removidas com o usuário: $USUARIO! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(grep -w $USUARIO /var/cpanel/accounting.log | grep -i $DOMINIO | tr ":" " " | awk -F " " '{print "DATA: "$3"/"$2"/"$7" - HORA: "$4":"$5":"$6 " - AÇÃO: " $8 " - AUTOR: " $9"/"$10 " - DOMÍNIO: "$11 " - IP-LOCAL/USUÁRIO: " $12 "/" $13}') 
+echo "$MAIN_LOG"
+log-null
+}
+
+# ------------------------------- FUNÇÕES /VAR/LOG/MESSAGES ----------------------------------------- #
+
+ftp-login(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de acessos FTP realizado com o usuário: $USUARIO! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(grep "ftpd" /var/log/messages | grep "$USUARIO" | grep "is now logged in" | awk -F " " '{print "DATA: " $1"/"$2 " - HORA: " $3 " - SERVIÇO: " $5 " - IP: " $6 }' | tr -d "()?@") 
+echo "$MAIN_LOG"
+log-null
+}
+
+# ------------------------------- FUNÇÕES /VAR/LOG/SECURE ----------------------------------------- #
+
+ssh-login(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de acessos SSH realizado com o usuário: $USUARIO! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(grep "Starting session" /var/log/secure | grep "$USUARIO" | grep -v "sftp" | awk -F " " '{print "DATA: " $1 "/" $2 " - HORA: "$3 " - USUARIO: " $12 " - IP: " $14 " - PROTOCOLO: ssh"}') 
+echo "$MAIN_LOG"
+log-null
+}
+
+sftp-login(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de acessos SFTP realizado com o usuário: $USUARIO! Aguarde... $COLOR_OFF"
+MAIN_LOG=$(grep "Starting session" /var/log/secure | grep "$USUARIO" | grep "sftp" | awk -F " " '{print "DATA: " $1 "/" $2 " - HORA: "$3 " - USUARIO: " $11 " - IP: " $13 " - PROTOCOLO: " $9}' | tr -d "'")
+echo "$MAIN_LOG"
+log-null
+}
+
+# ------------------------------- FUNÇÕES /usr/local/cpanel/logs/session_log ----------------------------------------- #
+
+# LOGINS REALIZADOS COM SUCESSO NO CPANEL
+cpanel-login(){
+check-root
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Logins realizados com sucesso na conta do usuário $USUARIO! $COLOR_OFF"
+MAIN_LOG=$(grep "cpaneld" /usr/local/cpanel/logs/session_log | grep "$USUARIO" | grep "loginsuccess" | awk -v username=$USUARIO -F" " '{print "\033[32;1m" "DATA: " "\033[0m" $1 " " $2 "\033[32;1m" " - IP DE ACESSO: " "\033[0m" $6 "\033[32;1m" " - PAINEL: " "\033[0m" $5 "\033[32;1m" " - USUÁRIO: " "\033[0m"  username}' | tr -d "]" | sed 's/\[cpaneld/cpanel/' | sed 's/\[2/2/')
+echo "$MAIN_LOG"
+log-null
+}
+
+# LOGINS CRIADOS VIA API NO CPANEL
+cpanel-session(){
+check-root
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Logins realizados com sucesso na conta do usuário $USUARIO! $COLOR_OFF"
+MAIN_LOG=$(grep "cpaneld" /usr/local/cpanel/logs/session_log | grep "$USUARIO" | grep "loadsession" | awk -v username=$USUARIO -F" " '{print "\033[32;1m" "DATA: " "\033[0m" $1 " " $2 "\033[32;1m" " - IP DE ACESSO: " "\033[0m" $6 "\033[32;1m" " - PAINEL: " "\033[0m" $5 "\033[32;1m" " - USUÁRIO: " "\033[0m"  username}' | tr -d "]" | sed 's/\[cpaneld/cpanel/' | sed 's/\[2/2/')
+echo "$MAIN_LOG"
+log-null
+}
+
+# LOGINS INVALIDOS NO CPANEL
+cpanel-fail(){
+check-root
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Logins inválidos realizados na conta do usuário $USUARIO! $COLOR_OFF"
+MAIN_LOG=$(grep "cpaneld" /usr/local/cpanel/logs/session_log | grep "$USUARIO" | grep "badpass" | awk -v username=$USUARIO -F" " '{print "\033[32;1m" "DATA: " "\033[0m" $1 " " $2 "\033[32;1m" " - IP DE ACESSO: " "\033[0m" $6 "\033[32;1m" " - PAINEL: " "\033[0m" $5 "\033[32;1m" " - USUÁRIO: " "\033[0m"  username}' | tr -d "]" | sed 's/\[cpaneld/cpanel/' | sed 's/\[2/2/')
+echo "$MAIN_LOG"
+log-null
+}
+
+# LOGINS REALIZADOS COM SUCESSO NO WHM
+whm-login(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Logins realizados com sucesso na conta do usuário $USUARIO! $COLOR_OFF"
+MAIN_LOG=$(grep "whostmgrd" /usr/local/cpanel/logs/session_log | grep "$USUARIO" | grep "loginsuccess" | awk -v username=$USUARIO -F" " '{print "\033[32;1m" "DATA: " "\033[0m" $1 " " $2 "\033[32;1m" " - IP DE ACESSO: " "\033[0m" $6 "\033[32;1m" " - PAINEL: " "\033[0m" $5 "\033[32;1m" " - USUÁRIO: " "\033[0m"  username}' | tr -d "]" | sed 's/\[whostmgrd/WHM/' | sed 's/\[2/2/')
+echo "$MAIN_LOG"
+log-null
+}
+
+# LOGINS CRIADOS VIA API NO WHM
+whm-session(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Logins realizados com sucesso na conta do usuário $USUARIO! $COLOR_OFF"
+MAIN_LOG=$(grep "whostmgrd" /usr/local/cpanel/logs/session_log | grep "$USUARIO" | grep "loadsession" | awk -v username=$USUARIO -F" " '{print "\033[32;1m" "DATA: " "\033[0m" $1 " " $2 "\033[32;1m" " - IP DE ACESSO: " "\033[0m" $6 "\033[32;1m" " - PAINEL: " "\033[0m" $5 "\033[32;1m" " - USUÁRIO: " "\033[0m"  username}' | tr -d "]" | sed 's/\[whostmgrd/WHM/' | sed 's/\[2/2/')
+echo "$MAIN_LOG"
+log-null
+}
+
+# LOGINS INVALIDOS NO WHM
+whm-fail(){
+echo -e "$GREEN_SINAL -$VERDE Verificando logs de Logins realizados com sucesso na conta do usuário $USUARIO! $COLOR_OFF"
+MAIN_LOG=$(grep "whostmgrd" /usr/local/cpanel/logs/session_log | grep "$USUARIO" | grep "badpass" | awk -v username=$USUARIO -F" " '{print "\033[32;1m" "DATA: " "\033[0m" $1 " " $2 "\033[32;1m" " - IP DE ACESSO: " "\033[0m" $6 "\033[32;1m" " - PAINEL: " "\033[0m" $5 "\033[32;1m" " - USUÁRIO: " "\033[0m"  username}' | tr -d "]" | sed 's/\[whostmgrd/WHM/' | sed 's/\[2/2/')
+echo "$MAIN_LOG"
+log-null
+}
+# ------------------------------- EXECUÇÃO ----------------------------------------- #
+check-root
+check-user
+    case $FLAG in  
+        "add-mail")
+            add-mail
+            ;;
+
+        "del-mail")
+            del-mail
+            ;;
+        
+        "add-sql")
+            add-sql
+            ;;
+
+        "del-sql")
+            del-sql
+            ;;
+
+        "cpanel-login")
+            cpanel-login
+            ;;
+
+        "cpanel-session")
+            cpanel-session
+            ;;    
+
+        "cpanel-fail")
+            cpanel-fail
+            ;;
+        
+        "whm-login")
+            whm-login
+            ;;
+
+        "whm-session")
+            whm-session
+            ;; 
+
+        "whm-fail")
+            whm-fail
+            ;;
+
+        "add-domain")
+            add-domain
+            ;;
+            
+        "del-domain")
+            del-domain
+            ;;  
+
+        "add-subdomain")
+            add-subdomain
+            ;;  
+
+        "del-subdomain")
+            del-subdomain
+            ;;  
+
+        "add-ftp")
+            add-ftp
+            ;;  
+
+        "del-ftp")
+            del-ftp
+            ;;  
+
+        "dns-zone")
+            dns-zone
+            ;;
+
+        "mail-mainlog")
+            mail-mainlog
+            ;;
+
+        "mail-pop3")
+            mail-pop3
+            ;;  
+
+        "mail-imap")
+            mail-imap
+            ;;
+        "mail-deleted")
+            mail-deleted
+            ;;
+
+        "acct-log")
+            acct-log
+            ;;            
+
+        "ftp-login")
+            ftp-login
+            ;;
+
+        "ssh-login")
+            ssh-login
+            ;;     
+        "sftp-login")
+            sftp-login
+            ;;
+
+        "cm-dropped")
+            cm-dropped
+            ;;
+        
+        "passwd-mail") 
+            passwd-mail
+            ;;
+
+        *)
+            echo -e "$RED_SINAL -$AMARELO A opção selecionada é inválida$COLOR_OFF!"
+            echo -e "$YELLOW_SINAL - Certifique-se de utilizar uma opção válida!"
+            exit 1
+            ;;  
+    esac
+#fi
