@@ -714,4 +714,3 @@ check-user
             exit 1
             ;;  
     esac
-#fi
