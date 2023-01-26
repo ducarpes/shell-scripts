@@ -41,6 +41,7 @@ HELP_KEY=0
 ZIP_KEY=0
 
 # ------------------------------- FUNÇÕES GERAIS ----------------------------------------- #
+
 #SOLICITA A ENTRADA DE UMA CONTA DE E-MAIL E DE UM TERMO PARA PESQUISA NOS LOGS (ASSUNTO, DESTINATÁRIO, REMETENTE)
 mail-select1(){
 EMAIL=""
@@ -92,33 +93,26 @@ then
 fi
 }
 
-#FUNÇÃO PARA VERIFICAR SE O USUÁRIO SELECIONADO É ROOT OU HGTRANSFER:
+#FUNÇÃO PARA VERIFICAR USUÁRIOS NÃO AUTORIZADOS:
 check-root(){
 if [ "$USUARIO" == "root" ] || [ "$USUARIO" == "hgtransfer" ];
 then
-    echo -e "$RED_SINAL -$VERDE O usuário escolhido não é autorizado. Pesquise um usuário de Cpanel! $COLOR_OFF"
+    echo -e "$RED_SINAL - O usuário escolhido não é autorizado. Pesquise um usuário de Cpanel válido!"
     exit 0
 fi
 }
 
-#FUNÇÃO PARA VERIFICAR SE O USUÁRIO SELECIONADO EXISTE NO SERVIDOR:
+# FUNÇÃO PARA VERIFICAR SE O USUÁRIO SELECIONADO EXISTE NO SERVIDOR:
 check-user(){
-HOME_USUARIO=$(grep $USUARIO /etc/passwd|cut -f6 -d":")
-id -u "$USUARIO" >/dev/null 2>&1
-if [ $? -eq 0 ]; then
-    if [ ! -d "$HOME_USUARIO" ]
-    then
-        echo -e "$RED_SINAL -$AMARELO O usuário $VERMELHO$USUARIO$AMARELO não foi encontrado neste servidor! $COLOR_OFF"
-        echo -e "$YELLOW_SINAL - Certifique-se que o usuário $VERMELHO$USUARIO$COLOR_OFF possui uma conta de CPANEL no servidor $HOSTNAME"
-        exit 1
-    fi
-else
-    echo -e "$RED_SINAL -$AMARELO O usuário $VERMELHO$USUARIO$AMARELO não foi encontrado neste servidor! $COLOR_OFF"
-    echo -e "$YELLOW_SINAL - Certifique-se que o usuário $VERMELHO$USUARIO$COLOR_OFF possui uma conta de CPANEL no servidor $VERMELHO$HOSTNAME$COLOR_OFF"
+CHECK_USER=$(whmapi1 listaccts search="$USUARIO" searchtype=user | grep "user:" | awk -F " " '{print$2}')
+if [ ! "$CHECK_USER" == "$USUARIO" ]
+then
+    echo -e "$YELLOW_SINAL - O Usuário $VERMELHO$USUARIO$COLOR_OFF não existe no servidor: $HOSTNAME"
     exit 1
 fi
 }
 
+# FUNÇÃO PARA VERIFICAR SE O SERVIDOR PERTENCE A HOSTGATOR LATAM:
 check-hg(){
 if [[  $(hostname) =~ .*hostgator* ]] || [[  $(hostname) =~ .*prodns*  ]] && [[  -e /opt/hgctrl/.zengator ]] 
 then
@@ -126,6 +120,7 @@ then
     exit 1
 fi
 }
+
 # ------------------------------- FUNÇÃO HELP ----------------------------------------- #
 
 help(){
@@ -207,7 +202,7 @@ echo -e "OPÇÕES DISPONÍVEIS:
 " 
 }
 
-# -------------------------------VALIDAÇÃO DE SERVIDORES DA MARCA----------------------------------------- # 
+# -------------------------------VALIDAÇÃO DE SERVIDORES LATAM ----------------------------------------- # 
 
 check-hg
 
@@ -264,9 +259,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "add_pop" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")  
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "add_pop" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")  
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -282,9 +277,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "delete_pop" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "delete_pop" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -299,9 +294,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "addb.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "addb.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -316,9 +311,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "deldb.html?db=" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | grep -v "cPanel_magic_revision" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " BANCO DE DADOS: " $7}' | tr -d "[" | sed 's/\/cpsess.*=//')
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "deldb.html?db=" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | grep -v "cPanel_magic_revision" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " BANCO DE DADOS: " $7}' | tr -d "[" | sed 's/\/cpsess.*=//')
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -333,9 +328,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "addon/doadddomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "addon/doadddomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -350,9 +345,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "addon/dodeldomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "addon/dodeldomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -367,9 +362,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "subdomain/doadddomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "subdomain/doadddomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -384,9 +379,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "subdomain/dodeldomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "subdomain/dodeldomain.html" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - SUBDOMÍNIO: "$7}' | tr -d "[" | sed 's/\/cpsess.*?domain=//' | sed 's/&rootdomain=/./' | sed 's/&dir.*Create//')
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -401,9 +396,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "add_ftp?user" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/&domain=/@/' | sed 's/&pass.*$//')
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "add_ftp?user" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/&domain=/@/' | sed 's/&pass.*$//')
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -418,9 +413,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "delete_ftp?user" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/%40/@/' | sed 's/&cache_fix=.*$//')
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "delete_ftp?user" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4 " - CONTA FTP: "$7}' | tr -d "[" | sed 's/\/cpsess.*?user=//' | sed 's/%40/@/' | sed 's/&cache_fix=.*$//')
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -435,9 +430,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep "/DNS/mass_edit_zone" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep "/DNS/mass_edit_zone" /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -452,9 +447,9 @@ echo "$MAIN_LOG"
 #ZIPADO
 if [ $ZIP_KEY -eq 1 ];
 then
-echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
-MAIN_LOG_ZIP=$(zgrep 'passwd_pop' /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | grep -v "proxy" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
-echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
+    echo -e "$GREEN_SINAL -$VERDE Verificando logs arquivados. A pesquisa pode demorar alguns minutos! Aguarde... $COLOR_OFF"
+    MAIN_LOG_ZIP=$(zgrep 'passwd_pop' /usr/local/cpanel/logs/archive/access_log-* | grep -w "$USUARIO" | grep -v "proxy" | awk -F " " '{print"IP DE ACESSO: "$1" - USUARIO: "$3 " - DATA: " $4}' | tr -d "[")
+    echo "$MAIN_LOG_ZIP" | sed 's/\/.*gz://'
 fi
 #SE VAZIO:
 log-null
@@ -599,118 +594,122 @@ echo "$MAIN_LOG"
 log-null
 }
 # ------------------------------- EXECUÇÃO ----------------------------------------- #
+
+#CHAMADA DAS FUNÇÕES DE CHECAGEM:
 check-root
 check-user
-    case $FLAG in  
-        "add-mail")
-            add-mail
-            ;;
 
-        "del-mail")
-            del-mail
-            ;;
-        
-        "add-sql")
-            add-sql
-            ;;
+#CHAMADA DAS FUNÇÕES DE LOG:
+case $FLAG in  
+    "add-mail")
+    add-mail
+    ;;
 
-        "del-sql")
-            del-sql
-            ;;
+    "del-mail")
+    del-mail
+    ;;
 
-        "cpanel-login")
-            cpanel-login
-            ;;
+    "add-sql")
+    add-sql
+    ;;
 
-        "cpanel-session")
-            cpanel-session
-            ;;    
+    "del-sql")
+    del-sql
+    ;;
 
-        "cpanel-fail")
-            cpanel-fail
-            ;;
-        
-        "whm-login")
-            whm-login
-            ;;
+    "cpanel-login")
+    cpanel-login
+    ;;
 
-        "whm-session")
-            whm-session
-            ;; 
+    "cpanel-session")
+    cpanel-session
+    ;;    
 
-        "whm-fail")
-            whm-fail
-            ;;
+    "cpanel-fail")
+    cpanel-fail
+    ;;
 
-        "add-domain")
-            add-domain
-            ;;
-            
-        "del-domain")
-            del-domain
-            ;;  
+    "whm-login")
+    whm-login
+    ;;
 
-        "add-subdomain")
-            add-subdomain
-            ;;  
+    "whm-session")
+    whm-session
+    ;; 
 
-        "del-subdomain")
-            del-subdomain
-            ;;  
+    "whm-fail")
+    whm-fail
+    ;;
 
-        "add-ftp")
-            add-ftp
-            ;;  
+    "add-domain")
+    add-domain
+    ;;
 
-        "del-ftp")
-            del-ftp
-            ;;  
+    "del-domain")
+    del-domain
+    ;;  
 
-        "dns-zone")
-            dns-zone
-            ;;
+    "add-subdomain")
+    add-subdomain
+    ;;  
 
-        "mail-mainlog")
-            mail-mainlog
-            ;;
+    "del-subdomain")
+    del-subdomain
+    ;;  
 
-        "mail-pop3")
-            mail-pop3
-            ;;  
+    "add-ftp")
+    add-ftp
+    ;;  
 
-        "mail-imap")
-            mail-imap
-            ;;
-        "mail-deleted")
-            mail-deleted
-            ;;
+    "del-ftp")
+    del-ftp
+    ;;  
 
-        "acct-log")
-            acct-log
-            ;;            
+    "dns-zone")
+    dns-zone
+    ;;
 
-        "ftp-login")
-            ftp-login
-            ;;
+    "mail-mainlog")
+    mail-mainlog
+    ;;
 
-        "ssh-login")
-            ssh-login
-            ;;     
-        "sftp-login")
-            sftp-login
-            ;;
+    "mail-pop3")
+    mail-pop3
+    ;;  
 
-        "cm-dropped")
-            cm-dropped
-            ;;
-        
-        "passwd-mail") 
-            passwd-mail
-            ;;
+    "mail-imap")
+    mail-imap
+    ;;
+    "mail-deleted")
+    mail-deleted
+    ;;
 
-        *)
-            echo -e "$RED_SINAL -$AMARELO A opção selecionada é inválida$COLOR_OFF!"
-            echo -e "$YELLOW_SINAL - Certifique-se de utilizar uma opção válida!"
-            exit 1
-            ;;  
-    esac
+    "acct-log")
+    acct-log
+    ;;            
+
+    "ftp-login")
+    ftp-login
+    ;;
+
+    "ssh-login")
+    ssh-login
+    ;;     
+    "sftp-login")
+    sftp-login
+    ;;
+
+    "cm-dropped")
+    cm-dropped
+    ;;
+
+    "passwd-mail") 
+    passwd-mail
+    ;;
+
+    *)
+    echo -e "$RED_SINAL -$AMARELO A opção selecionada é inválida$COLOR_OFF!"
+    echo -e "$YELLOW_SINAL - Certifique-se de utilizar uma opção válida!"
+    exit 1
+    ;;  
+esac
