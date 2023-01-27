@@ -38,8 +38,10 @@ ZIP_KEY=0
 
 #SOLICITA A ENTRADA DE UMA CONTA DE E-MAIL E DE UM TERMO PARA PESQUISA NOS LOGS (ASSUNTO, DESTINATÁRIO, REMETENTE) 
 _mailSelect1(){
+
 EMAIL=""
 EMAIL_GREP=""
+
 while [[ ! "$EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
 do 
     read -p "$(echo -e "$GREEN_SINAL - Insira o endereço de e-mail de origem: ")" EMAIL
@@ -48,6 +50,7 @@ do
         echo -e "$RED_SINAL -$YELLOW O valor digitado não é um endereço de e-mail! $COLOR_OFF"
     fi
 done
+
 while [ "$EMAIL_GREP" == "" ]
 do
     read -p "$(echo -e "$GREEN_SINAL - Insira uma termo chave para pesquisa: ")" EMAIL_GREP
@@ -56,7 +59,9 @@ done
 
 #SOLICITA A ENTRADA DE UMA CONTA DE E-MAIL PARA PESQUISA NOS LOGS
 _mailSelect2(){
+
 EMAIL=""
+
 while [[ ! "$EMAIL" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
 do
     read -p "$(echo -e "$GREEN_SINAL - Insira o endereço de e-mail de origem: ")" EMAIL
@@ -69,10 +74,16 @@ done
 
 #FUNÇÃO QUE SOLICITA A ENTRADA DE UM DOMÍNIO PARA PESQUISA NOS LOGS
 _domainSelect(){
+
 DOMINIO=""
-while [ "$DOMINIO" == "" ]
+
+while [[ ! "$DOMINIO" =~ ^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}$ ]]
 do 
     read -p "$(echo -e "$GREEN_SINAL - Insira o domínio principal da conta que deseja pesquisar: ")" DOMINIO
+    if [[ ! "$DOMINIO" =~ ^([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,6}$ ]]
+    then
+        echo -e "$RED_SINAL -$YELLOW O valor digitado $RED($DOMINIO)$YELLOW não é um endereço de domínio Válido! $COLOR_OFF"
+    fi
 done
 }
 
@@ -83,23 +94,25 @@ if [ "$ZIP_KEY" -eq 1 ]
 then
     if [ "$MAIN_LOG_ZIP" = "" ]
     then
-    echo -e "$RED_SINAL -$YELLOW Nenhum registro foi encontrado para esta pesquisa nos logs arquivados! $COLOR_OFF"
-    exit 0
+        echo -e "$RED_SINAL -$YELLOW Nenhum registro foi encontrado para esta pesquisa nos logs arquivados! $COLOR_OFF"
+        exit 0
     fi
 fi
 
 if [ "$MAIN_LOG" = "" ]
 then
-        echo -e "$RED_SINAL -$YELLOW Nenhum registro foi encontrado para esta pesquisa nos logs recentes! $COLOR_OFF"
-        exit 0  
+    echo -e "$RED_SINAL -$YELLOW Nenhum registro foi encontrado para esta pesquisa nos logs recentes! $COLOR_OFF"
+    exit 0  
 fi
 }
 
 #FUNÇÃO PARA VERIFICAR USUÁRIOS NÃO AUTORIZADOS:
 _checkRoot(){
-if [ "$USUARIO" == "root" ] || [ "$USUARIO" == "hgtransfer" ];
+
+if [ "$USUARIO" == "root" ] || [ "$USUARIO" == "hgtransfer" ] || [ -z "$USUARIO" ] ;
 then
-    echo -e "$RED_SINAL -$YELLOW O usuário escolhido não é autorizado. Pesquise um usuário de Cpanel válido! $COLOR_OFF"
+    echo -e "$RED_SINAL -$YELLOW O usuário escolhido não é autorizado ou não foi especificado. $COLOR_OFF"
+    echo -e "$YELLOW_SINAL - Certifique-se de utilizar um usuário válido!"
     exit 0
 fi
 }
@@ -107,20 +120,27 @@ fi
 # FUNÇÃO PARA VERIFICAR SE O USUÁRIO SELECIONADO EXISTE NO SERVIDOR:
 _checkUser(){
 CHECK_USER=$(whmapi1 listaccts search="$USUARIO" searchtype=user | grep "user:" | awk -F " " '{print$2}')
+
 if [ ! "$CHECK_USER" == "$USUARIO" ]
 then
-    echo -e "$YELLOW_SINAL -$YELLOW  O Usuário $RED$USUARIO$COLOR_OFF não existe no servidor: $HOSTNAME $COLOR_OFF"
-    exit 1
+    echo -e "$YELLOW_SINAL -$YELLOW  O Usuário $RED$USUARIO$YELLOW não existe no servidor: $HOSTNAME $COLOR_OFF"
+    exit 0
 fi
 }
 
-# FUNÇÃO PARA VERIFICAR SE O SERVIDOR PERTENCE A HOSTGATOR LATAM:
-_checkHostgator(){
-if [[  $(hostname) =~ .*hostgator* ]] || [[  $(hostname) =~ .*prodns*  ]] && [[  -e /opt/hgctrl/.zengator ]] 
-then
-    echo -e "$YELLOW_SINAL -$YELLOW Não é possível executar este script no servidor: $HOSTNAME $COLOR_OFF"
-    exit 1
-fi
+# FUNÇÃO PARA PROIBIR QUE SEJA EXECUTADO EM SERVIDORES DA HOSTGATOR USA E OUTRAS MARCAS:
+_checkHostgatorLatam(){
+
+sharedHostnames=(hostgator.com hostgator.in hostgator.com.tr websitewelcome.com bluehost.com webhostingservices.com justhost.com)
+
+for hosts in "${sharedHostnames[@]}"
+do
+	if [[ "$hosts" == $(hostname | cut -d. -f2-) ]]; 
+	then
+        echo -e "$YELLOW_SINAL -$YELLOW Não é possível executar este script no servidor: $HOSTNAME $COLOR_OFF"
+        exit 0
+    fi
+done
 }
 
 # ------------------------------- FUNÇÃO HELP ----------------------------------------- #
@@ -145,7 +165,7 @@ echo -e "EXEMPLO:
 ./sherlok.sh -u USUARIO -l add-mail -z
 
 "
-echo -e "OPÇÕES DISPONÍVEIS:
+echo -e "OPÇÕES DISPONÍVEIS PARA O ARGUMENTO <LOG>:
 -------------------------
 01 - add-mail        --> Verificar contas de e-mails adicionados no Cpanel;
 -------------------------
@@ -234,7 +254,7 @@ done
 
 _checkRoot
 _checkUser
-_checkHostgator
+_checkHostgatorLatam
 
 # ------------------------------- FUNÇÕES ACCESS_LOG ----------------------------------------- #
 
@@ -253,7 +273,6 @@ then
 fi
 #SE VAZIO:
 _logNull
-
 }
 
 # PESQUISA CONTAS DE E-MAILS REMOVIDAS PELO CPANEL
@@ -585,7 +604,8 @@ _logNull
 # ------------------------------- EXECUÇÃO ----------------------------------------- #
 
 
-#CHAMADA DAS FUNÇÕES DE LOG:
+#FUNÇÃO PARA CHAMADA DAS FUNÇÕES DE LOG:
+_logFunctions(){
 case $FLAG in  
     "add-mail")
     add-mail
@@ -694,8 +714,14 @@ case $FLAG in
     ;;
 
     *)
-    echo -e "$RED_SINAL -$YELLOW A opção de LOG selecionada é inválida$COLOR_OFF!"
+    echo -e "$RED_SINAL -$YELLOW A opção de LOG selecionada é inválida!$COLOR_OFF"
     echo -e "$YELLOW_SINAL - Certifique-se de utilizar uma opção de LOG válida!"
     exit 1
     ;;  
 esac
+}
+
+#CHAMADA DA FUNÇÃO DE LOG SELECIONADO
+ _logFunctions
+
+#FIM DO SCRIPT
