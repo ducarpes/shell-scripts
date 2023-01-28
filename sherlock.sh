@@ -2,8 +2,7 @@
 #
 # sherlock.sh - Realiza a busca por resultado de diversos tipos de LOGS do servidor.
 # 
-# Autor:      Eduardo C. Souza 
-# Manutenção: Eduardo C. Souza 
+# Autor:      Eduardo C. Souza
 # 
 # ------------------------------------------------------------------------ # 
 #   Este script utiliza os logs maillog, access_log, exim_mainlog e outros para localizar registros conforme necessidade.
@@ -506,7 +505,7 @@ _logNull
 mail-deleted(){
 _mailSelect2
 echo -e "$GREEN_SINAL -$GREEN Verificando logs de emails removidos da conta $EMAIL! Aguarde... $COLOR_OFF"
-POP3_LOG=$(grep "$EMAIL" /var/log/maillog | egrep -v 'del=0' | egrep -i 'del=' | grep "pop3" | awk -F " " {'print"\033[32;1m""POP3 - ""DATA: ""\033[0m" $1" "$2" "$3"\033[32;1m"" - APAGADOS: ""\033[0m"$12"\033[32;1m"" - EMAIL: ""\033[0m"$6'} | tr -d "," | sed 's/pop3.*(//' | sed 's/).*://' ) 
+POP3_LOG=$(grep "$EMAIL" /var/log/maillog | egrep -v 'del=0' | egrep -i 'del=' | grep "pop3" | awk -F " " '{print"\033[32;1m""POP3 - ""DATA: ""\033[0m" $1" "$2" "$3"\033[32;1m"" - APAGADOS: ""\033[0m"$12"\033[32;1m"" - EMAIL: ""\033[0m"$6}' | tr -d "," | sed 's/pop3.*(//' | sed 's/).*://' ) 
 IMAP_LOG=$(grep "$EMAIL" /var/log/maillog | egrep -v 'deleted=0|expunged=0|trashed=0' | egrep -i 'deleted=|expunged=|trashed=' | grep "imap" | sed 's/)<.*deleted//' | sed 's/=/ /' | sed 's/imap.*(//' | awk -F " " '{print"\033[32;1m""IMAP - ""DATA: ""\033[0m" $1" "$2" "$3"\033[32;1m"" - APAGADOS: ""\033[0m""deleted="$7" "$8" "$9"\033[32;1m"" - EMAIL: ""\033[0m"$6}')
 echo "$POP3_LOG"
 echo "$IMAP_LOG"  
@@ -602,7 +601,6 @@ _logNull
 }
 
 # ------------------------------- EXECUÇÃO ----------------------------------------- #
-
 
 #FUNÇÃO PARA CHAMADA DAS FUNÇÕES DE LOG:
 _logFunctions(){
